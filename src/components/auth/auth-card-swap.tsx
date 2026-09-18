@@ -361,7 +361,7 @@ export function AuthCardSwap({
                         required
                         value={loginIdentifier}
                         onChange={(e) => setLoginIdentifier(e.target.value)}
-                        placeholder="admin@tssb.local atau username"
+                        placeholder="nama@domain.com atau username"
                         className="w-full h-10 pl-9 pr-3 rounded-lg bg-slate-950/70 border border-slate-700 focus:border-cyan-500 focus:ring-1 focus:ring-cyan-500 text-xs text-slate-100 placeholder-slate-500 transition-all outline-none"
                       />
                     </div>

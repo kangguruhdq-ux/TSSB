@@ -414,6 +414,46 @@
   ],
   "activityLogs": [
     {
+      "id": "act_1789736082225",
+      "userId": "usr_admin_01",
+      "action": "USER_LOGOUT",
+      "entity": "AUTH",
+      "entityId": "usr_admin_01",
+      "description": "User @admin logged out of session.",
+      "ipAddress": "::1",
+      "createdAt": "2026-09-18T12:54:42.225Z"
+    },
+    {
+      "id": "act_1789736064331",
+      "userId": "usr_admin_01",
+      "action": "USER_UPDATED",
+      "entity": "AUTH",
+      "entityId": "settings",
+      "description": "Admin updated platform settings: Maintenance=false, Registration=false.",
+      "ipAddress": "::1",
+      "createdAt": "2026-09-18T12:54:24.331Z"
+    },
+    {
+      "id": "act_1789736030522",
+      "userId": "usr_admin_01",
+      "action": "USER_LOGIN",
+      "entity": "AUTH",
+      "entityId": "usr_admin_01",
+      "description": "User admin logged in successfully via swap-card portal.",
+      "ipAddress": "::1",
+      "createdAt": "2026-09-18T12:53:50.522Z"
+    },
+    {
+      "id": "act_1789735934178",
+      "userId": "usr_admin_01",
+      "action": "USER_LOGOUT",
+      "entity": "AUTH",
+      "entityId": "usr_admin_01",
+      "description": "User @admin logged out of session.",
+      "ipAddress": "::1",
+      "createdAt": "2026-09-18T12:52:14.178Z"
+    },
+    {
       "id": "act_1789735877899",
       "userId": "usr_admin_01",
       "action": "USER_UPDATED",
@@ -916,7 +956,7 @@
   "systemSettings": {
     "platformName": "TSSB Infrastructure Platform",
     "maintenanceMode": false,
-    "allowRegistration": true,
+    "allowRegistration": false,
     "loginSuspended": false,
     "loginSuspensionMessage": "Akses login pengguna saat ini ditangguhkan sementara oleh Administrator untuk pemeliharaan sistem. Silakan coba lagi nanti.",
     "sessionTimeoutMinutes": 60,
