@@ -7,6 +7,11 @@ async function main() {
   console.log("Starting TSSB database seed...");
 
   // 1. Clean existing records in reverse dependency order
+  await prisma.ticketMessage.deleteMany();
+  await prisma.ticket.deleteMany();
+  await prisma.mailMessage.deleteMany();
+  await prisma.fileTransfer.deleteMany();
+  await prisma.file.deleteMany();
   await prisma.activityLog.deleteMany();
   await prisma.documentation.deleteMany();
   await prisma.networkConfiguration.deleteMany();
@@ -400,6 +405,250 @@ async function main() {
     await prisma.activityLog.create({ data: act });
   }
   console.log("Created 20 audit activity logs.");
+
+  // 9. Create System Settings
+  await prisma.systemSettings.upsert({
+    where: { id: "default" },
+    create: {
+      id: "default",
+      platformName: "TSSB Infrastructure Platform",
+      maintenanceMode: false,
+      allowRegistration: true,
+      loginSuspended: false,
+      loginSuspensionMessage: "Akses login pengguna saat ini ditangguhkan sementara oleh Administrator untuk pemeliharaan sistem. Silakan coba lagi nanti.",
+      sessionTimeoutMinutes: 60,
+      maxUploadSizeBytes: 104857600,
+      announcementText: "System operational. All 5 cluster servers and network routes are active.",
+      showAnnouncement: true,
+      ftpPort: 21,
+      smtpPort: 587,
+      imapPort: 993,
+      storageQuotaDefaultMb: 10240,
+      lastBackupAt: new Date("2026-09-18T06:00:00Z"),
+    },
+    update: {},
+  });
+  console.log("Created system settings.");
+
+  // 10. Create Default Files
+  const file1 = await prisma.file.create({
+    data: {
+      userId: admin.id,
+      name: "nginx.conf.backup",
+      size: 14500,
+      mimeType: "text/plain",
+      category: "CONFIG",
+      description: "Production reverse proxy routing configuration for edge gateway.",
+      content: "events { worker_connections 1024; }\nhttp {\n  upstream backend { server 122.128.18.238:3000; }\n  server {\n    listen 80; server_name tssb.local;\n    return 301 https://$host$request_uri;\n  }\n  server {\n    listen 443 ssl;\n    server_name tssb.local;\n    ssl_certificate /etc/ssl/certs/tssb.pem;\n    location / { proxy_pass http://backend; }\n  }\n}",
+    },
+  });
+
+  await prisma.file.create({
+    data: {
+      userId: admin.id,
+      name: "vlan_topology_specs.pdf",
+      size: 251000,
+      mimeType: "application/pdf",
+      category: "ARCHIVE",
+      description: "Network architecture blue-print and 802.1Q trunking specifications.",
+      content: "[Binary PDF Specification Content - TSSB Multi-VLAN Topology v2.4]",
+    },
+  });
+
+  await prisma.file.create({
+    data: {
+      userId: admin.id,
+      name: "ssl_wildcard_cert.pem",
+      size: 4920,
+      mimeType: "text/plain",
+      category: "CERTIFICATE",
+      description: "RSA 4096-bit wildcard public certificate (*.tssb.local).",
+      content: "-----BEGIN CERTIFICATE-----\nMIIDXTCCAkWgAwIBAgIUW6o1Q8L7WjFz583TSSBPROD1001...\n-----END CERTIFICATE-----",
+    },
+  });
+
+  await prisma.file.create({
+    data: {
+      userId: normalUser.id,
+      name: "database_migration_v2.sql",
+      size: 70144,
+      mimeType: "text/plain",
+      category: "SCRIPT",
+      description: "DDL indexes and foreign keys migration script for PostgreSQL.",
+      content: "-- Migration: V2__optimize_indexes.sql\nCREATE INDEX IF NOT EXISTS idx_services_server_id ON services(server_id);\nCREATE INDEX IF NOT EXISTS idx_activity_logs_created_at ON activity_logs(created_at DESC);",
+    },
+  });
+
+  await prisma.file.create({
+    data: {
+      userId: normalUser.id,
+      name: "system_health_audit.log",
+      size: 18840,
+      mimeType: "text/plain",
+      category: "LOG",
+      description: "Automated cron output: memory utilization and packet drop rates.",
+      content: "[2026-09-18 00:00:01] INFO [cron]: Running automated telemetry sweep\n[2026-09-18 00:00:02] INFO [cron]: CPU avg: 14.2% | RAM: 38.6% | Disk: 42.1%\n[2026-09-18 00:00:03] SUCCESS: All 5 servers responding within 1.2ms latency.",
+    },
+  });
+  console.log("Created 5 storage files.");
+
+  // 11. Create File Transfers
+  await prisma.fileTransfer.create({
+    data: {
+      senderId: admin.id,
+      senderName: admin.name,
+      senderUsername: admin.username,
+      receiverId: normalUser.id,
+      receiverName: normalUser.name,
+      receiverUsername: normalUser.username,
+      fileName: "nginx.conf.backup",
+      fileSize: 14500,
+      protocol: "SFTP",
+      port: 22,
+      status: "COMPLETED",
+      note: "Please verify upstream proxy directives before evening maintenance.",
+    },
+  });
+
+  await prisma.fileTransfer.create({
+    data: {
+      senderId: normalUser.id,
+      senderName: normalUser.name,
+      senderUsername: normalUser.username,
+      receiverId: admin.id,
+      receiverName: admin.name,
+      receiverUsername: admin.username,
+      fileName: "system_health_audit.log",
+      fileSize: 18840,
+      protocol: "FTP",
+      port: 21,
+      status: "COMPLETED",
+      note: "Weekly audit log exported from Prometheus daemon.",
+    },
+  });
+  console.log("Created 2 file transfers.");
+
+  // 12. Create Mail Messages
+  await prisma.mailMessage.create({
+    data: {
+      senderId: admin.id,
+      senderName: admin.name,
+      senderEmail: admin.email,
+      recipientId: normalUser.id,
+      recipientName: normalUser.name,
+      recipientEmail: normalUser.email,
+      subject: "Scheduled Network Maintenance Window (VLAN 30)",
+      body: "Hello Kaiti,\n\nPlease be advised that the authoritative DNS node (serve-client3) will undergo security patching tonight at 02:00 UTC. Ensure any ongoing service migrations on VLAN 30 are concluded beforehand.\n\nRegards,\nSystem Administrator",
+      priority: "HIGH",
+      status: "DELIVERED",
+      isRead: true,
+      hasAttachment: true,
+      attachmentName: "nginx.conf.backup",
+    },
+  });
+
+  await prisma.mailMessage.create({
+    data: {
+      senderId: normalUser.id,
+      senderName: normalUser.name,
+      senderEmail: normalUser.email,
+      recipientId: admin.id,
+      recipientName: admin.name,
+      recipientEmail: admin.email,
+      subject: "Re: Scheduled Network Maintenance Window (VLAN 30)",
+      body: "Acknowledged. All zone transfer scripts have been verified and backup routes in VLAN 10 are primed for failover.\n\nThank you,\nKaiti Mckin",
+      priority: "NORMAL",
+      status: "DELIVERED",
+      isRead: false,
+      hasAttachment: false,
+    },
+  });
+
+  await prisma.mailMessage.create({
+    data: {
+      senderId: admin.id,
+      senderName: admin.name,
+      senderEmail: admin.email,
+      recipientId: normalUser.id,
+      recipientName: normalUser.name,
+      recipientEmail: normalUser.email,
+      subject: "FTP Quota Increased & vsftpd Daemon Operational",
+      body: "Kaiti, your storage quota has been increased to 50 GB for cluster runbooks. The new vsftpd service instance on server-client2 is operational on port 21.\n\nBest,\nAdmin",
+      priority: "NORMAL",
+      status: "DELIVERED",
+      isRead: true,
+      hasAttachment: false,
+    },
+  });
+  console.log("Created 3 email messages.");
+
+  // 13. Create Tickets & Messages
+  const ticket1 = await prisma.ticket.create({
+    data: {
+      title: "DNS Zone Synchronization Degraded on Secondary Resolver",
+      category: "BUG",
+      priority: "HIGH",
+      status: "IN_PROGRESS",
+      authorId: normalUser.id,
+      authorName: normalUser.name,
+      authorUsername: normalUser.username,
+      authorAvatar: normalUser.avatarUrl,
+      assignedTo: admin.name,
+      description: "Zone transfer AXFR for tssb.local timed out between ns1 and ns2. BIND9 error indicates transfer refusal.",
+    },
+  });
+
+  await prisma.ticketMessage.create({
+    data: {
+      ticketId: ticket1.id,
+      authorId: normalUser.id,
+      authorName: normalUser.name,
+      authorUsername: normalUser.username,
+      authorRole: normalUser.role,
+      authorAvatar: normalUser.avatarUrl,
+      message: "Here is the error log when running rndc reload tssb.local: 'transfer of tssb.local/IN from 198.51.100.12#53: failed while receiving responses: REFUSED'.",
+    },
+  });
+
+  await prisma.ticketMessage.create({
+    data: {
+      ticketId: ticket1.id,
+      authorId: admin.id,
+      authorName: admin.name,
+      authorUsername: admin.username,
+      authorRole: admin.role,
+      authorAvatar: admin.avatarUrl,
+      message: "Investigating named.conf.options now. Updating allow-transfer ACL to include the secondary subnet. Stand by.",
+    },
+  });
+
+  const ticket2 = await prisma.ticket.create({
+    data: {
+      title: "Storage Pool High Watermark on Application Node 01",
+      category: "SERVER_INCIDENT",
+      priority: "NORMAL",
+      status: "OPEN",
+      authorId: normalUser.id,
+      authorName: normalUser.name,
+      authorUsername: normalUser.username,
+      authorAvatar: normalUser.avatarUrl,
+      assignedTo: null,
+      description: "Docker build caches on serve-client2 are exceeding recommended threshold. Storage quota alerts triggered.",
+    },
+  });
+
+  await prisma.ticketMessage.create({
+    data: {
+      ticketId: ticket2.id,
+      authorId: normalUser.id,
+      authorName: normalUser.name,
+      authorUsername: normalUser.username,
+      authorRole: normalUser.role,
+      authorAvatar: normalUser.avatarUrl,
+      message: "Docker build caches on serve-client2 are exceeding recommended threshold. Storage quota alerts triggered.",
+    },
+  });
+  console.log("Created 2 tickets with conversation history.");
 
   console.log("Database seed completed successfully.");
 }

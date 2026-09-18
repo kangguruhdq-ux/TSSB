@@ -52,23 +52,25 @@ enum DocCategory {
 }
 
 model User {
-  id           String       @id @default(cuid())
-  name         String
-  username     String       @unique
-  email        String       @unique
-  passwordHash String
-  avatarUrl    String?
-  bio          String?
-  role         Role         @default(USER)
-  status       UserStatus   @default(ACTIVE)
-  createdAt    DateTime     @default(now())
-  updatedAt    DateTime     @updatedAt
+  id               String       @id @default(cuid())
+  name             String
+  username         String       @unique
+  email            String       @unique
+  passwordHash     String
+  avatarUrl        String?
+  bio              String?
+  role             Role         @default(USER)
+  status           UserStatus   @default(ACTIVE)
+  securitySettings Json?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
 
   servers        Server[]
   services       Service[]
   networkConfigs NetworkConfiguration[]
   documentation  Documentation[]
   activityLogs   ActivityLog[]
+  files          File[]
 
   @@index([email])
   @@index([username])
@@ -176,4 +178,134 @@ model ActivityLog {
   @@index([userId])
   @@index([createdAt])
   @@index([action])
+}
+
+model File {
+  id          String   @id @default(cuid())
+  userId      String
+  name        String
+  size        Int      @default(1024)
+  mimeType    String   @default("text/plain")
+  category    String   @default("DATA")
+  description String?
+  content     String?  @db.Text
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([category])
+  @@index([createdAt])
+}
+
+model FileTransfer {
+  id               String   @id @default(cuid())
+  senderId         String
+  senderName       String
+  senderUsername   String
+  receiverId       String
+  receiverName     String
+  receiverUsername String
+  fileName         String
+  fileSize         Int      @default(1024)
+  protocol         String   @default("SFTP")
+  port             Int      @default(22)
+  status           String   @default("COMPLETED")
+  note             String?
+  fileContent      String?  @db.Text
+  transferredAt    DateTime @default(now())
+
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([status])
+  @@index([transferredAt])
+}
+
+model MailMessage {
+  id             String   @id @default(cuid())
+  senderId       String
+  senderName     String
+  senderEmail    String
+  recipientId    String
+  recipientName  String
+  recipientEmail String
+  subject        String
+  body           String   @db.Text
+  priority       String   @default("NORMAL")
+  status         String   @default("DELIVERED")
+  isRead         Boolean  @default(false)
+  hasAttachment  Boolean  @default(false)
+  attachmentName String?
+  attachments    Json?
+  isStarred      Boolean  @default(false)
+  isTrash        Boolean  @default(false)
+  sentAt         DateTime @default(now())
+
+  @@index([recipientId])
+  @@index([senderId])
+  @@index([isTrash])
+  @@index([sentAt])
+}
+
+model SystemSettings {
+  id                     String    @id @default("default")
+  platformName           String    @default("TSSB Infrastructure Platform")
+  maintenanceMode        Boolean   @default(false)
+  allowRegistration      Boolean   @default(true)
+  loginSuspended         Boolean   @default(false)
+  loginSuspensionMessage String    @default("Akses login pengguna saat ini ditangguhkan sementara oleh Administrator untuk pemeliharaan sistem. Silakan coba lagi nanti.")
+  sessionTimeoutMinutes  Int       @default(60)
+  maxUploadSizeBytes     Float     @default(104857600)
+  announcementText       String    @default("System operational. All 5 cluster servers and network routes are active.")
+  showAnnouncement       Boolean   @default(true)
+  ftpPort                Int       @default(21)
+  smtpPort               Int       @default(587)
+  imapPort               Int       @default(993)
+  storageQuotaDefaultMb  Int       @default(10240)
+  lastBackupAt           DateTime?
+  updatedAt              DateTime  @updatedAt
+}
+
+model Ticket {
+  id             String          @id @default(cuid())
+  title          String
+  category       String          @default("BUG")
+  priority       String          @default("NORMAL")
+  status         String          @default("OPEN")
+  authorId       String
+  authorName     String
+  authorUsername String
+  authorAvatar   String?
+  assignedTo     String?
+  description    String          @db.Text
+  imageUrl       String?         @db.Text
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  messages TicketMessage[]
+
+  @@index([authorId])
+  @@index([status])
+  @@index([priority])
+  @@index([createdAt])
+}
+
+model TicketMessage {
+  id             String   @id @default(cuid())
+  ticketId       String
+  authorId       String
+  authorName     String
+  authorUsername String
+  authorRole     String   @default("USER")
+  authorAvatar   String?
+  message        String   @db.Text
+  imageUrl       String?  @db.Text
+  createdAt      DateTime @default(now())
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([authorId])
+  @@index([createdAt])
 }

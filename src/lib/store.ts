@@ -1,7 +1,11 @@
 import fs from "fs";
 import path from "path";
-
-const DATA_FILE = path.join(process.cwd(), ".tssb-data.json");
+function getDataFilePath(): string {
+  if (process.env.VERCEL) {
+    return path.join("/tmp", ".tssb-data.json");
+  }
+  return path.join(process.cwd(), ".tssb-data.json");
+}
 
 interface DataSchema {
   users: any[];
@@ -664,8 +668,9 @@ const defaultData: DataSchema = {
 
 function readData(): DataSchema {
   try {
-    if (fs.existsSync(DATA_FILE)) {
-      const raw = fs.readFileSync(DATA_FILE, "utf-8");
+    const dataFile = getDataFilePath();
+    if (fs.existsSync(dataFile)) {
+      const raw = fs.readFileSync(dataFile, "utf-8");
       const parsed = JSON.parse(raw);
       return {
         ...defaultData,
@@ -678,8 +683,18 @@ function readData(): DataSchema {
         ticketMessages: Array.isArray(parsed.ticketMessages) && parsed.ticketMessages.length > 0 ? parsed.ticketMessages : defaultData.ticketMessages,
       };
     }
+    // If on Vercel and /tmp doesn't have it yet, try reading bundled root file
+    const rootDataFile = path.join(process.cwd(), ".tssb-data.json");
+    if (fs.existsSync(rootDataFile)) {
+      const raw = fs.readFileSync(rootDataFile, "utf-8");
+      const parsed = JSON.parse(raw);
+      return {
+        ...defaultData,
+        ...parsed,
+      };
+    }
   } catch (err) {
-    console.error("Error reading .tssb-data.json, falling back to defaults:", err);
+    console.error("Error reading data file, falling back to defaults:", err);
   }
   writeData(defaultData);
   return defaultData;
@@ -687,9 +702,10 @@ function readData(): DataSchema {
 
 function writeData(data: DataSchema): void {
   try {
-    fs.writeFileSync(DATA_FILE, JSON.stringify(data, null, 2), "utf-8");
+    const dataFile = getDataFilePath();
+    fs.writeFileSync(dataFile, JSON.stringify(data, null, 2), "utf-8");
   } catch (err) {
-    console.error("Error writing .tssb-data.json:", err);
+    console.error("Error writing data file:", err);
   }
 }
 
@@ -1176,6 +1192,18 @@ export const fallbackStore = {
   },
 
   file: {
+    findFirst: async ({ where }: any = {}) => {
+      const data = readData();
+      const list = data.files.filter((f) => {
+        if (where?.id && f.id !== where.id) return false;
+        if (where?.userId && f.userId !== where.userId) return false;
+        if (where?.category && f.category !== where.category) return false;
+        return true;
+      });
+      const f = list[0] || null;
+      if (!f) return null;
+      return { ...f, user: data.users.find((u) => u.id === f.userId) };
+    },
     findMany: async ({ where }: any = {}) => {
       const data = readData();
       let list = [...data.files];
@@ -1219,6 +1247,14 @@ export const fallbackStore = {
   },
 
   fileTransfer: {
+    findFirst: async ({ where }: any = {}) => {
+      const data = readData();
+      let list = [...data.fileTransfers];
+      if (where?.userId) {
+        list = list.filter((ft) => ft.senderId === where.userId || ft.receiverId === where.userId);
+      }
+      return list[0] || null;
+    },
     findMany: async ({ where }: any = {}) => {
       const data = readData();
       let list = [...data.fileTransfers];
@@ -1260,6 +1296,17 @@ export const fallbackStore = {
   },
 
   mailMessage: {
+    findFirst: async ({ where }: any = {}) => {
+      const data = readData();
+      let list = [...data.mailMessages];
+      if (where?.recipientId) {
+        list = list.filter((m) => m.recipientId === where.recipientId);
+      }
+      if (where?.senderId) {
+        list = list.filter((m) => m.senderId === where.senderId);
+      }
+      return list[0] || null;
+    },
     findMany: async ({ where }: any = {}) => {
       const data = readData();
       let list = [...data.mailMessages];
@@ -1336,6 +1383,16 @@ export const fallbackStore = {
   },
 
   ticket: {
+    findFirst: async ({ where }: any = {}) => {
+      const data = readData();
+      let list = [...data.tickets];
+      if (where) {
+        if (where.authorId) list = list.filter((t) => t.authorId === where.authorId);
+        if (where.status) list = list.filter((t) => t.status === where.status);
+        if (where.category) list = list.filter((t) => t.category === where.category);
+      }
+      return list[0] || null;
+    },
     findMany: async ({ where, orderBy }: any = {}) => {
       const data = readData();
       let list = [...data.tickets];

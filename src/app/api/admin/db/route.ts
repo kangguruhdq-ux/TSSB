@@ -36,6 +36,12 @@ export async function POST(request: NextRequest) {
     }
 
     if (action === "RESET_SEEDED") {
+      await prisma.systemSettings.update({
+        data: {
+          lastBackupAt: new Date().toISOString(),
+        },
+      });
+
       const dataFilePath = path.resolve(process.cwd(), ".tssb-data.json");
       if (fs.existsSync(dataFilePath)) {
         try {

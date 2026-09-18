@@ -3,7 +3,6 @@ import { fallbackStore } from "./store";
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
-  dbStatus: boolean | undefined;
 };
 
 const rawPrisma =
@@ -16,52 +15,34 @@ if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = rawPrisma;
 }
 
-// Track whether live PostgreSQL is actively reachable
-let isConnected = globalForPrisma.dbStatus ?? false;
-let hasCheckedOnce = false;
-
-// Fast health probe with timeout
-async function probeConnection(): Promise<boolean> {
-  // If connection string is obviously placeholder, don't stall network
+function hasConfiguredDatabase(): boolean {
   const dbUrl = process.env.DATABASE_URL || "";
-  if (
-    !dbUrl ||
-    dbUrl.includes("demo_password") ||
-    dbUrl.includes("ep-sample") ||
-    dbUrl.includes("sample-pooler")
-  ) {
-    return false;
-  }
-
-  try {
-    const timeoutPromise = new Promise<boolean>((_, reject) =>
-      setTimeout(() => reject(new Error("Timeout")), 1500)
-    );
-    const queryPromise = rawPrisma.$queryRaw`SELECT 1`.then(() => true);
-    return await Promise.race([queryPromise, timeoutPromise]);
-  } catch {
-    return false;
-  }
+  return (
+    Boolean(dbUrl) &&
+    !dbUrl.includes("demo_password") &&
+    !dbUrl.includes("ep-sample") &&
+    !dbUrl.includes("sample-pooler")
+  );
 }
 
 async function exec<T>(prismaFn: () => Promise<T>, fallbackFn: () => Promise<any>): Promise<T> {
-  if (!hasCheckedOnce) {
-    isConnected = await probeConnection();
-    hasCheckedOnce = true;
-    globalForPrisma.dbStatus = isConnected;
-  }
-
-  if (isConnected) {
+  if (hasConfiguredDatabase()) {
     try {
       return await prismaFn();
     } catch (err: any) {
+      // If error is database connection/network related, fall back gracefully
       if (
         err?.name === "PrismaClientInitializationError" ||
         err?.code === "P1001" ||
-        err?.message?.includes("Can't reach database")
+        err?.code === "P1002" ||
+        err?.code === "P1003" ||
+        err?.code === "P1017" ||
+        err?.message?.includes("Can't reach database") ||
+        err?.message?.includes("connection closed") ||
+        err?.message?.includes("Connection refused") ||
+        err?.message?.includes("timed out")
       ) {
-        isConnected = false;
-        globalForPrisma.dbStatus = false;
+        console.warn("[Database] Connection unavailable, falling back to local store:", err?.message || err);
         return await fallbackFn();
       }
       throw err;
@@ -124,40 +105,117 @@ export const prisma = {
     deleteMany: () => exec(() => rawPrisma.activityLog.deleteMany(), () => fallbackStore.activityLog.deleteMany()),
   },
   file: {
-    findMany: (args?: any) => fallbackStore.file.findMany(args),
-    findUnique: (args: any) => fallbackStore.file.findUnique(args),
-    create: (args: any) => fallbackStore.file.create(args),
-    delete: (args: any) => fallbackStore.file.delete(args),
+    findFirst: (args?: any) => exec(() => rawPrisma.file.findFirst(args), () => fallbackStore.file.findFirst(args)),
+    findUnique: (args: any) => exec(() => rawPrisma.file.findUnique(args), () => fallbackStore.file.findUnique(args)),
+    findMany: (args?: any) => exec(() => rawPrisma.file.findMany({ ...args, orderBy: args?.orderBy || { createdAt: "desc" } }), () => fallbackStore.file.findMany(args)),
+    create: (args: any) => exec(() => rawPrisma.file.create(args), () => fallbackStore.file.create(args)),
+    delete: (args: any) => exec(() => rawPrisma.file.delete(args), () => fallbackStore.file.delete(args)),
   },
   fileTransfer: {
-    findMany: (args?: any) => fallbackStore.fileTransfer.findMany(args),
-    findUnique: (args: any) => fallbackStore.fileTransfer.findUnique(args),
-    create: (args: any) => fallbackStore.fileTransfer.create(args),
-    update: (args: any) => fallbackStore.fileTransfer.update(args),
-    delete: (args: any) => fallbackStore.fileTransfer.delete(args),
+    findFirst: (args?: any) => exec(() => rawPrisma.fileTransfer.findFirst(args), () => fallbackStore.fileTransfer.findFirst(args)),
+    findUnique: (args: any) => exec(() => rawPrisma.fileTransfer.findUnique(args), () => fallbackStore.fileTransfer.findUnique(args)),
+    findMany: (args?: any) =>
+      exec(() => {
+        let finalArgs = args ? { ...args } : {};
+        if (finalArgs.where?.userId) {
+          const { userId, ...restWhere } = finalArgs.where;
+          finalArgs.where = {
+            ...restWhere,
+            OR: [{ senderId: userId }, { receiverId: userId }],
+          };
+        }
+        return rawPrisma.fileTransfer.findMany({
+          ...finalArgs,
+          orderBy: finalArgs.orderBy || { transferredAt: "desc" },
+        });
+      }, () => fallbackStore.fileTransfer.findMany(args)),
+    create: (args: any) => exec(() => rawPrisma.fileTransfer.create(args), () => fallbackStore.fileTransfer.create(args)),
+    update: (args: any) => exec(() => rawPrisma.fileTransfer.update(args), () => fallbackStore.fileTransfer.update(args)),
+    delete: (args: any) => exec(() => rawPrisma.fileTransfer.delete(args), () => fallbackStore.fileTransfer.delete(args)),
   },
   mailMessage: {
-    findMany: (args?: any) => fallbackStore.mailMessage.findMany(args),
-    findUnique: (args: any) => fallbackStore.mailMessage.findUnique(args),
-    create: (args: any) => fallbackStore.mailMessage.create(args),
-    update: (args: any) => fallbackStore.mailMessage.update(args),
-    delete: (args: any) => fallbackStore.mailMessage.delete(args),
-    deleteMany: (args?: any) => fallbackStore.mailMessage.deleteMany(args),
+    findFirst: (args?: any) => exec(() => rawPrisma.mailMessage.findFirst(args), () => fallbackStore.mailMessage.findFirst(args)),
+    findUnique: (args: any) => exec(() => rawPrisma.mailMessage.findUnique(args), () => fallbackStore.mailMessage.findUnique(args)),
+    findMany: (args?: any) =>
+      exec(() => {
+        let finalArgs = args ? { ...args } : {};
+        if (finalArgs.where?.userId) {
+          const { userId, ...restWhere } = finalArgs.where;
+          finalArgs.where = {
+            ...restWhere,
+            OR: [{ senderId: userId }, { recipientId: userId }],
+          };
+        }
+        return rawPrisma.mailMessage.findMany({
+          ...finalArgs,
+          orderBy: finalArgs.orderBy || { sentAt: "desc" },
+        });
+      }, () => fallbackStore.mailMessage.findMany(args)),
+    create: (args: any) => exec(() => rawPrisma.mailMessage.create(args), () => fallbackStore.mailMessage.create(args)),
+    update: (args: any) => exec(() => rawPrisma.mailMessage.update(args), () => fallbackStore.mailMessage.update(args)),
+    delete: (args: any) => exec(() => rawPrisma.mailMessage.delete(args), () => fallbackStore.mailMessage.delete(args)),
+    deleteMany: (args?: any) => exec(() => rawPrisma.mailMessage.deleteMany(args), () => fallbackStore.mailMessage.deleteMany(args)),
   },
   systemSettings: {
-    get: () => fallbackStore.systemSettings.get(),
-    update: (args: any) => fallbackStore.systemSettings.update(args),
+    get: async () =>
+      exec(
+        async () => {
+          let settings = await rawPrisma.systemSettings.findUnique({
+            where: { id: "default" },
+          });
+          if (!settings) {
+            settings = await rawPrisma.systemSettings.create({
+              data: { id: "default" },
+            });
+          }
+          return settings;
+        },
+        () => fallbackStore.systemSettings.get()
+      ),
+    update: async (args: any) =>
+      exec(
+        async () => {
+          const updateData = { ...args.data };
+          if (updateData.lastBackupAt && typeof updateData.lastBackupAt === "string") {
+            updateData.lastBackupAt = new Date(updateData.lastBackupAt);
+          }
+          return await rawPrisma.systemSettings.upsert({
+            where: { id: "default" },
+            create: { id: "default", ...updateData },
+            update: updateData,
+          });
+        },
+        () => fallbackStore.systemSettings.update(args)
+      ),
   },
   ticket: {
-    findMany: (args?: any) => fallbackStore.ticket.findMany(args),
-    findUnique: (args: any) => fallbackStore.ticket.findUnique(args),
-    create: (args: any) => fallbackStore.ticket.create(args),
-    update: (args: any) => fallbackStore.ticket.update(args),
-    delete: (args: any) => fallbackStore.ticket.delete(args),
+    findFirst: (args?: any) => exec(() => rawPrisma.ticket.findFirst(args), () => fallbackStore.ticket.findFirst(args)),
+    findUnique: (args: any) => exec(() => rawPrisma.ticket.findUnique(args), () => fallbackStore.ticket.findUnique(args)),
+    findMany: (args?: any) =>
+      exec(
+        () =>
+          rawPrisma.ticket.findMany({
+            ...args,
+            orderBy: args?.orderBy || { createdAt: "desc" },
+          }),
+        () => fallbackStore.ticket.findMany(args)
+      ),
+    create: (args: any) => exec(() => rawPrisma.ticket.create(args), () => fallbackStore.ticket.create(args)),
+    update: (args: any) => exec(() => rawPrisma.ticket.update(args), () => fallbackStore.ticket.update(args)),
+    delete: (args: any) => exec(() => rawPrisma.ticket.delete(args), () => fallbackStore.ticket.delete(args)),
+    count: (args?: any) => exec(() => rawPrisma.ticket.count(args), () => fallbackStore.ticket.findMany(args).then(r => r.length)),
   },
   ticketMessage: {
-    findMany: (args?: any) => fallbackStore.ticketMessage.findMany(args),
-    create: (args: any) => fallbackStore.ticketMessage.create(args),
+    findMany: (args?: any) =>
+      exec(
+        () =>
+          rawPrisma.ticketMessage.findMany({
+            ...args,
+            orderBy: args?.orderBy || { createdAt: "asc" },
+          }),
+        () => fallbackStore.ticketMessage.findMany(args)
+      ),
+    create: (args: any) => exec(() => rawPrisma.ticketMessage.create(args), () => fallbackStore.ticketMessage.create(args)),
   },
   $queryRaw: rawPrisma.$queryRaw.bind(rawPrisma),
   $disconnect: rawPrisma.$disconnect.bind(rawPrisma),
@@ -168,21 +226,33 @@ export async function checkDatabaseHealth(): Promise<{
   latencyMs: number;
   message: string;
 }> {
-  const start = Date.now();
-  const ok = await probeConnection();
-  const latencyMs = Date.now() - start;
+  if (!hasConfiguredDatabase()) {
+    return {
+      connected: false,
+      latencyMs: 1,
+      message: "Local persistent database active (Configure live Neon PostgreSQL in .env for production deployment)",
+    };
+  }
 
-  if (ok) {
+  const start = Date.now();
+  try {
+    const timeoutPromise = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error("Health check timeout")), 8000)
+    );
+    await Promise.race([rawPrisma.$queryRaw`SELECT 1`, timeoutPromise]);
+    const latencyMs = Date.now() - start;
+
     return {
       connected: true,
       latencyMs,
       message: "Connected to Neon PostgreSQL cloud instance",
     };
+  } catch (err: any) {
+    return {
+      connected: false,
+      latencyMs: Date.now() - start,
+      message: `Database connection probe timeout: ${err?.message || "unreachable"}`,
+    };
   }
-
-  return {
-    connected: false,
-    latencyMs: 1,
-    message: "Local persistent database active (Configure live Neon PostgreSQL in .env for production deployment)",
-  };
 }
+
