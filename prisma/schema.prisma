@@ -1,0 +1,179 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ServerType {
+  WEB
+  DNS
+  FILE
+  MAIL
+  DATABASE
+  APPLICATION
+  OTHER
+}
+
+enum ServerStatus {
+  ONLINE
+  OFFLINE
+  MAINTENANCE
+}
+
+enum ServiceStatus {
+  ACTIVE
+  INACTIVE
+  DEGRADED
+  STOPPED
+}
+
+enum DocCategory {
+  INSTALLATION
+  CONFIGURATION
+  NETWORKING
+  SECURITY
+  TROUBLESHOOTING
+  MAINTENANCE
+  OTHER
+}
+
+model User {
+  id           String       @id @default(cuid())
+  name         String
+  username     String       @unique
+  email        String       @unique
+  passwordHash String
+  avatarUrl    String?
+  bio          String?
+  role         Role         @default(USER)
+  status       UserStatus   @default(ACTIVE)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  servers        Server[]
+  services       Service[]
+  networkConfigs NetworkConfiguration[]
+  documentation  Documentation[]
+  activityLogs   ActivityLog[]
+
+  @@index([email])
+  @@index([username])
+  @@index([role])
+  @@index([status])
+}
+
+model Server {
+  id              String       @id @default(cuid())
+  name            String
+  hostname        String
+  ipAddress       String
+  operatingSystem String
+  serverType      ServerType
+  location        String
+  status          ServerStatus @default(ONLINE)
+  description     String?
+  createdById     String
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  createdBy      User                   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+  services       Service[]
+  networkConfigs NetworkConfiguration[]
+  documentation  Documentation[]
+
+  @@index([status])
+  @@index([serverType])
+  @@index([createdById])
+}
+
+model Service {
+  id          String        @id @default(cuid())
+  name        String
+  serverId    String
+  port        Int
+  protocol    String        @default("TCP")
+  version     String?
+  status      ServiceStatus @default(ACTIVE)
+  description String?
+  createdById String
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  server    Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  createdBy User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([serverId])
+  @@index([status])
+  @@index([createdById])
+}
+
+model NetworkConfiguration {
+  id            String   @id @default(cuid())
+  serverId      String
+  interfaceName String
+  ipAddress     String
+  subnetMask    String
+  gateway       String
+  dnsPrimary    String
+  dnsSecondary  String?
+  vlan          Int?
+  description   String?
+  createdById   String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  server    Server @relation(fields: [serverId], references: [id], onDelete: Cascade)
+  createdBy User   @relation(fields: [createdById], references: [id], onDelete: Cascade)
+
+  @@index([serverId])
+  @@index([createdById])
+}
+
+model Documentation {
+  id        String      @id @default(cuid())
+  title     String
+  category  DocCategory
+  content   String      @db.Text
+  serverId  String?
+  authorId  String
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  server Server? @relation(fields: [serverId], references: [id], onDelete: SetNull)
+  author User    @relation(fields: [authorId], references: [id], onDelete: Cascade)
+
+  @@index([category])
+  @@index([serverId])
+  @@index([authorId])
+}
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  userId      String?
+  action      String
+  entity      String
+  entityId    String?
+  description String
+  ipAddress   String?
+  createdAt   DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@index([action])
+}
