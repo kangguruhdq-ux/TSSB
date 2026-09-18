@@ -1,9 +1,24 @@
 import { getSession } from "@/lib/auth";
 import { SessionUser } from "@/types";
 import { NextResponse } from "next/server";
+import { prisma } from "@/lib/db";
 
 export async function getCurrentUser(): Promise<SessionUser | null> {
-  return await getSession();
+  const session = await getSession();
+  if (!session) return null;
+  if (session.avatarUrl) return session;
+  try {
+    const dbUser = await prisma.user.findUnique({
+      where: { id: session.id },
+      select: { avatarUrl: true },
+    });
+    if (dbUser?.avatarUrl) {
+      return { ...session, avatarUrl: dbUser.avatarUrl };
+    }
+  } catch {
+    // fallback
+  }
+  return session;
 }
 
 export async function requireAuth(): Promise<SessionUser> {

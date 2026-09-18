@@ -59,18 +59,52 @@ export function ProfileView({ initialUser }: ProfileViewProps) {
       return;
     }
 
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error("Ukuran foto maksimal 2MB.");
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("Ukuran foto maksimal 5MB.");
       return;
     }
 
     const reader = new FileReader();
     reader.onload = (ev) => {
-      const dataUri = ev.target?.result as string;
-      if (dataUri) {
-        setAvatarUrl(dataUri);
-        toast.success("Foto profil dipilih! Klik 'Save Profile Changes' untuk menyimpan.");
-      }
+      const rawUri = ev.target?.result as string;
+      if (!rawUri) return;
+
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        const MAX_SIZE = 256;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > MAX_SIZE) {
+            height = Math.round((height * MAX_SIZE) / width);
+            width = MAX_SIZE;
+          }
+        } else {
+          if (height > MAX_SIZE) {
+            width = Math.round((width * MAX_SIZE) / height);
+            height = MAX_SIZE;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL("image/jpeg", 0.85);
+          setAvatarUrl(compressed);
+        } else {
+          setAvatarUrl(rawUri);
+        }
+        toast.success("Foto profil siap disimpan! Klik 'Save Profile Changes'.");
+      };
+      img.onerror = () => {
+        setAvatarUrl(rawUri);
+        toast.success("Foto profil dipilih!");
+      };
+      img.src = rawUri;
     };
     reader.readAsDataURL(file);
     e.target.value = "";
@@ -91,15 +125,15 @@ export function ProfileView({ initialUser }: ProfileViewProps) {
           avatarUrl,
         }),
       });
-      const data = await res.json();
-      if (!res.ok || !data.success) {
-        toast.error(data.message || "Failed to update profile");
+      const data = await res.json().catch(() => null);
+      if (!res.ok || !data?.success) {
+        toast.error(data?.message || `Failed to update profile (${res.status})`);
         return;
       }
       toast.success("Operator profile updated successfully!");
       router.refresh();
-    } catch {
-      toast.error("Network communication failure");
+    } catch (err: any) {
+      toast.error(err?.message || "Network communication failure");
     } finally {
       setIsSaving(false);
     }

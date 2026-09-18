@@ -17,6 +17,12 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
 
 export async function createSessionToken(user: SessionUser, rememberMe = false): Promise<string> {
   const expiresIn = rememberMe ? "30d" : "1d";
+  // Cookies have a hard 4KB limit. Never store large base64 data URIs inside the JWT cookie.
+  const safeAvatarUrl =
+    user.avatarUrl && !user.avatarUrl.startsWith("data:") && user.avatarUrl.length < 500
+      ? user.avatarUrl
+      : null;
+
   return new SignJWT({
     sub: user.id,
     name: user.name,
@@ -24,7 +30,7 @@ export async function createSessionToken(user: SessionUser, rememberMe = false):
     email: user.email,
     role: user.role,
     status: user.status,
-    avatarUrl: user.avatarUrl,
+    avatarUrl: safeAvatarUrl,
   })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
